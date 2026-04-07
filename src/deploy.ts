@@ -66,12 +66,38 @@ export async function deploy(inputs: Inputs): Promise<DeployResult> {
     core.info(
       `Upgrading package (upgrade-capability: ${existingEntry.upgradeCapability})`
     )
-    tx = await suiUpgrade(sui.path, {
-      cwd: inputs.dir,
-      upgradeCapId: existingEntry.upgradeCapability,
-    })
-    publishedType = 'upgraded'
-    previousPackageId = existingEntry.publishedAt
+
+    try {
+      tx = await suiUpgrade(sui.path, {
+        cwd: inputs.dir,
+        upgradeCapId: existingEntry.upgradeCapability,
+      })
+      publishedType = 'upgraded'
+      previousPackageId = existingEntry.publishedAt
+    } catch (error) {
+      // In auto mode, compatibility failures should gracefully fallback to publish.
+      if (
+        inputs.deployMode === 'auto' &&
+        isUpgradeCompatibilityError(error)
+      ) {
+        core.warning(
+          'Upgrade failed due to compatibility constraints. Falling back to publish new package.'
+        )
+
+        const removed = await removePublishedEntry(inputs.dir, inputs.env)
+        if (removed) {
+          core.info(
+            `Removed [published.${inputs.env}] section from Published.toml before fallback publish.`
+          )
+        }
+
+        tx = await suiPublish(sui.path, { cwd: inputs.dir })
+        publishedType = 'new'
+        previousPackageId = existingEntry.publishedAt
+      } else {
+        throw error
+      }
+    }
   } else {
     if (inputs.deployMode === 'force-publish') {
       const removed = await removePublishedEntry(inputs.dir, inputs.env)
@@ -96,6 +122,20 @@ export async function deploy(inputs: Inputs): Promise<DeployResult> {
   const result = parseTxResult(tx)
 
   return { ...result, publishedType, previousPackageId }
+}
+
+function isUpgradeCompatibilityError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.toLowerCase()
+
+  // Match common Sui compatibility signals while avoiding broad catch-all behavior.
+  return (
+    normalized.includes('incompatible') ||
+    normalized.includes('compatibility') ||
+    normalized.includes('linkage') ||
+    normalized.includes('cannot upgrade') ||
+    normalized.includes('upgrade is not compatible')
+  )
 }
 
 // ─── Transaction parsing ───────────────────────────────────────────────────

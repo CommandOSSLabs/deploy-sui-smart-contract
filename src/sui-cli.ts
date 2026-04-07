@@ -28,6 +28,9 @@ interface SuiEnvsJson {
   activeEnv?: string
 }
 
+const OFFICIAL_RPC_MAINNET = 'https://fullnode.mainnet.sui.io:443'
+const OFFICIAL_RPC_TESTNET = 'https://fullnode.testnet.sui.io:443'
+
 export async function validateSuiSetup(): Promise<SuiSetupInfo> {
   const suiPath = await io.which('sui', true)
 
@@ -59,43 +62,40 @@ export async function ensureEnvAndSwitch(
   env: string,
   rpcUrl?: string
 ): Promise<void> {
+  const effectiveRpcUrl =
+    rpcUrl ?? getDefaultRpcUrlForEnv(env)
+
+  if (!rpcUrl) {
+    core.info(
+      `No rpc-url provided. Using default endpoint for env "${env}": ${effectiveRpcUrl}`
+    )
+  }
+
   const envsInfo = await listClientEnvs(suiPath)
   const existing = envsInfo.envs.find((item) => item.alias === env)
 
-  if (!rpcUrl) {
-    if (!existing) {
-      throw new Error(
-        `Sui environment "${env}" does not exist in local config. ` +
-          'Please configure it in setup-sui-cli or provide rpc-url.'
-      )
-    }
-    await runSui(suiPath, ['client', 'switch', '--env', env])
-    core.info(`Using existing Sui env: ${env}`)
-    return
-  }
-
   if (!existing) {
-    core.info(`Adding missing env "${env}" with rpc ${rpcUrl}`)
+    core.info(`Adding missing env "${env}" with rpc ${effectiveRpcUrl}`)
     await runSui(suiPath, [
       'client',
       'new-env',
       '--alias',
       env,
       '--rpc',
-      rpcUrl,
+      effectiveRpcUrl,
     ])
     await runSui(suiPath, ['client', 'switch', '--env', env])
     return
   }
 
-  if (normalizeUrl(existing.rpc) === normalizeUrl(rpcUrl)) {
+  if (normalizeUrl(existing.rpc) === normalizeUrl(effectiveRpcUrl)) {
     core.info(`Using existing Sui env "${env}" (rpc already matches input)`)
     await runSui(suiPath, ['client', 'switch', '--env', env])
     return
   }
 
   core.info(
-    `Trying to recreate env "${env}" with the provided rpc-url to override config.`
+    `Trying to recreate env "${env}" with the resolved rpc-url to override config.`
   )
   const sameAliasResult = await runSuiAllowFail(suiPath, [
     'client',
@@ -103,7 +103,7 @@ export async function ensureEnvAndSwitch(
     '--alias',
     env,
     '--rpc',
-    rpcUrl,
+    effectiveRpcUrl,
   ])
 
   if (sameAliasResult.exitCode === 0) {
@@ -124,7 +124,7 @@ export async function ensureEnvAndSwitch(
 
   if (
     overrideExisting &&
-    normalizeUrl(overrideExisting.rpc) !== normalizeUrl(rpcUrl)
+    normalizeUrl(overrideExisting.rpc) !== normalizeUrl(effectiveRpcUrl)
   ) {
     throw new Error(
       `Cannot override env "${env}" in-place and existing override alias "${overrideAlias}" points to a different rpc. ` +
@@ -142,12 +142,22 @@ export async function ensureEnvAndSwitch(
       '--alias',
       overrideAlias,
       '--rpc',
-      rpcUrl,
+        effectiveRpcUrl,
     ])
   }
 
   await runSui(suiPath, ['client', 'switch', '--env', overrideAlias])
   core.info(`Switched to override env alias: ${overrideAlias}`)
+}
+
+function getDefaultRpcUrlForEnv(env: string): string {
+  const normalizedEnv = env.trim().toLowerCase()
+
+  if (normalizedEnv === 'mainnet') return OFFICIAL_RPC_MAINNET
+  if (normalizedEnv === 'testnet') return OFFICIAL_RPC_TESTNET
+
+  // Keep behavior explicit for unknown env aliases.
+  return OFFICIAL_RPC_TESTNET
 }
 
 export interface PublishOptions {
