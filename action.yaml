@@ -14,7 +14,7 @@ inputs:
     required: false
     default: testnet
   rpc-url:
-    description: Optional RPC URL. Adds missing env, or uses an override alias only when env exists with a different RPC.
+    description: Optional RPC URL override. If omitted, uses official endpoint by env (mainnet/testnet; fallback testnet), then adds/switches/overrides env as needed.
     required: false
   deploy-mode:
     description: Deployment strategy (auto, force-publish, or safe-upgrade-only).
@@ -31,7 +31,7 @@ outputs:
   published-type:
     description: Publish result type, either new or upgraded.
   previous-package-id:
-    description: Empty for new publish; same as published-package-id for upgrade; previous package ID for force-upgrade.
+    description: Empty for new publish; same as published-package-id for upgrade; previous package ID for force-publish.
 
 runs:
   using: node24

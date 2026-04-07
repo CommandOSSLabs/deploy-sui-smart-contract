@@ -26,13 +26,13 @@ The `rpc-url` input controls which RPC endpoint is used for deployment:
 - **If omitted**: Uses the official Sui CLI RPC endpoint based on the `env` parameter:
   - `mainnet`: `https://fullnode.mainnet.sui.io:443`
   - `testnet` (default): `https://fullnode.testnet.sui.io:443`
-  - Other environments will fallback to the `testnet` endpoint unless they are recognized by the Sui CLI.
+  - Other environments fall back to the `testnet` endpoint.
 
 ### Deploy Modes
 
-- **`auto`** (default): Attempts to upgrade the contract whenever possible. If the changes are incompatible with the existing upgrade cap, a force-publish is performed instead.
-- **`force-publish`**: Ignores the existing upgrade cap and published packages; publishes a new contract every time.
-- **`safe-upgrade-only`**: Attempts to upgrade like `auto` mode, but throws an error if incompatible changes are detected instead of falling back to force-publish.
+- **`auto`** (default): If `Published.toml` contains an `upgrade-capability` for the selected `env`, the action attempts an upgrade. If upgrade compatibility checks fail, it falls back to publishing a new package.
+- **`force-publish`**: Ignores any existing published entry for the selected `env` and always publishes a new package.
+- **`safe-upgrade-only`**: Same as `auto` mode, but if compatibility checks failed, it will error out, ensuring that no unintended new package is published.
 
 ## Outputs
 
@@ -42,7 +42,7 @@ The `rpc-url` input controls which RPC endpoint is used for deployment:
 | `upgrade-cap`          | Upgrade capability object ID used for package upgrades.                                                                              |
 | `published-package-id` | Package ID after publish/upgrade.                                                                                                    |
 | `published-type`       | Publish result type, either `new` or `upgraded`.                                                                                     |
-| `previous-package-id`  | Empty when newly published; same as `published-package-id` when upgraded; holds the previous package ID when force-upgrade was used. |
+| `previous-package-id`  | Empty when newly published; same as `published-package-id` when upgraded; holds the previous package ID when force-publish was used. |
 
 ## Examples
 

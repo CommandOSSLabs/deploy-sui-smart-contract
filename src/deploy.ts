@@ -5,7 +5,8 @@
  *   auto             – Upgrade if an upgrade-capability exists in Published.toml
  *                      for the target env; otherwise publish new.
  *   force-publish    – Always run `sui client publish` (new package ID each time).
- *   safe-upgrade-only – Only upgrade; fail loudly if no upgrade-capability is found.
+ *   safe-upgrade-only – Inherits auto's first deploy behavior (publish when
+ *                      no env entry exists), then upgrade-only afterward.
  */
 
 import * as core from '@actions/core'
@@ -49,12 +50,13 @@ export async function deploy(inputs: Inputs): Promise<DeployResult> {
   let previousPackageId = ''
 
   const shouldUpgrade =
-    inputs.deployMode === 'safe-upgrade-only' ||
+    (inputs.deployMode === 'safe-upgrade-only' && !!existingEntry) ||
     (inputs.deployMode === 'auto' && !!existingEntry?.upgradeCapability)
 
   if (
     inputs.deployMode === 'safe-upgrade-only' &&
-    !existingEntry?.upgradeCapability
+    existingEntry &&
+    !existingEntry.upgradeCapability
   ) {
     throw new Error(
       `deploy-mode is "safe-upgrade-only" but no upgrade-capability was found ` +
@@ -110,6 +112,12 @@ export async function deploy(inputs: Inputs): Promise<DeployResult> {
           `No [published.${inputs.env}] section found to remove before force-publish.`
         )
       }
+    }
+
+    if (inputs.deployMode === 'safe-upgrade-only' && !existingEntry) {
+      core.info(
+        `No existing published entry for env "${inputs.env}". Publishing initial package in safe-upgrade-only mode.`
+      )
     }
 
     core.info('Publishing new package...')
