@@ -2,7 +2,7 @@
 
 Publish or upgrade a Sui Move smart contract package using the Sui CLI. This action automates the deployment process, handling both new deployments and upgrades based on the specified strategy.
 
-> [!NOTE] Notice
+> [!NOTE]
 > As this action uses the Sui CLI under the hood, it will update the `Published.toml` file in-place to reflect the new package ID after deployment. Make sure to commit the updated `Published.toml` file back to your repository if you want to keep it in sync with the deployed contract.
 
 ## Prerequisite
