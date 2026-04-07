@@ -173,7 +173,7 @@ export async function suiPublish(
   suiPath: string,
   opts: PublishOptions
 ): Promise<TxResponse> {
-  const args = ['client', 'publish', '--json', '--skip-dependency-verification']
+  const args = ['client', 'publish', '--json']
   if (opts.gasLimit) args.push('--gas-budget', String(opts.gasLimit))
   return runSuiJson(suiPath, args, opts.cwd)
 }
@@ -188,7 +188,6 @@ export async function suiUpgrade(
     '--upgrade-capability',
     opts.upgradeCapId,
     '--json',
-    '--skip-dependency-verification',
   ]
   if (opts.gasLimit) args.push('--gas-budget', String(opts.gasLimit))
   return runSuiJson(suiPath, args, opts.cwd)
