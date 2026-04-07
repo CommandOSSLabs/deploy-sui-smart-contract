@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsdown --minify",
     "test": "bun test",
-    "test:act": "act workflow_dispatch -W action-test.yml -j test-action --container-architecture linux/amd64 --secret-file .secrets",
+    "test:act": "act workflow_dispatch -W action-test.yml -j test-action --bind --container-architecture linux/amd64 --secret-file .secrets",
     "check": "biome check",
     "check:fix": "biome check --fix"
   },

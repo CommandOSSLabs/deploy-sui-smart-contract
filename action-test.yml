@@ -12,7 +12,8 @@ jobs:
       - name: 🛎 Checkout
         uses: actions/checkout@v6
 
-      - uses: 🏗 oven-sh/setup-bun@v2
+      - name: 📦 Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: 🧩 Install dependencies
         run: bun install
@@ -23,11 +24,129 @@ jobs:
       - name: 📦 Setup Sui CLI
         uses: CommandOSSLabs/setup-sui-cli@v1
         with:
+          version: testnet-v1.69.1
           network: testnet
           private_key: ${{ secrets.SUI_DEPLOYER_PRIVATE_KEY }}
 
-      - name: 🚀 Deploy Contract
+      - name: 🧹 Reset Published Artifacts
+        run: |
+          rm -f example-contract/Published.toml example-contract/Published.yaml
+          rm -rf artifacts
+          mkdir -p artifacts
+
+      - name: 🚀 Deploy Contract (auto publish)
+        id: auto_publish
         uses: ./
         with:
           dir: example-contract
+
+      - name: 📸 Snapshot Published (auto publish)
+        run: |
+          set -euo pipefail
+          test -f example-contract/Published.toml
+          cp example-contract/Published.toml artifacts/auto_publish.Published.toml
+
+      - name: 🔁 Deploy Contract (auto upgrade)
+        id: auto_upgrade
+        uses: ./
+        with:
+          dir: example-contract
+          deploy-mode: auto
+
+      - name: 📸 Snapshot Published (auto upgrade)
+        run: |
+          set -euo pipefail
+          test -f example-contract/Published.toml
+          cp example-contract/Published.toml artifacts/auto_upgrade.Published.toml
+
+      - name: 🆕 Deploy Contract (force publish)
+        id: force_publish
+        uses: ./
+        with:
+          dir: example-contract
+          deploy-mode: force-publish
+
+      - name: 📸 Snapshot Published (force publish)
+        run: |
+          set -euo pipefail
+          test -f example-contract/Published.toml
+          cp example-contract/Published.toml artifacts/force_publish.Published.toml
+
+      - name: 🔒 Deploy Contract (safe upgrade only)
+        id: safe_upgrade
+        uses: ./
+        with:
+          dir: example-contract
+          deploy-mode: safe-upgrade-only
+
+      - name: 📸 Snapshot Published (safe upgrade only)
+        run: |
+          set -euo pipefail
+          test -f example-contract/Published.toml
+          cp example-contract/Published.toml artifacts/safe_upgrade.Published.toml
+
+      - name: ✅ Verify Deployment Modes And Published File
+        env:
+          AUTO_PUBLISH_TYPE: ${{ steps.auto_publish.outputs.published-type }}
+          AUTO_PUBLISH_PKG: ${{ steps.auto_publish.outputs.published-package-id }}
+          AUTO_PUBLISH_PREV: ${{ steps.auto_publish.outputs.previous-package-id }}
+          AUTO_UPGRADE_TYPE: ${{ steps.auto_upgrade.outputs.published-type }}
+          AUTO_UPGRADE_PKG: ${{ steps.auto_upgrade.outputs.published-package-id }}
+          AUTO_UPGRADE_PREV: ${{ steps.auto_upgrade.outputs.previous-package-id }}
+          FORCE_PUBLISH_TYPE: ${{ steps.force_publish.outputs.published-type }}
+          FORCE_PUBLISH_PKG: ${{ steps.force_publish.outputs.published-package-id }}
+          FORCE_PUBLISH_PREV: ${{ steps.force_publish.outputs.previous-package-id }}
+          SAFE_UPGRADE_TYPE: ${{ steps.safe_upgrade.outputs.published-type }}
+          SAFE_UPGRADE_PKG: ${{ steps.safe_upgrade.outputs.published-package-id }}
+          SAFE_UPGRADE_PREV: ${{ steps.safe_upgrade.outputs.previous-package-id }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "ERROR: $*" >&2
+            exit 1
+          }
+
+          [[ "$AUTO_PUBLISH_TYPE" == "new" ]] || fail "auto publish expected type=new, got '$AUTO_PUBLISH_TYPE'"
+          [[ "$AUTO_UPGRADE_TYPE" == "upgraded" ]] || fail "auto upgrade expected type=upgraded, got '$AUTO_UPGRADE_TYPE'"
+          [[ "$FORCE_PUBLISH_TYPE" == "new" ]] || fail "force publish expected type=new, got '$FORCE_PUBLISH_TYPE'"
+          [[ "$SAFE_UPGRADE_TYPE" == "upgraded" ]] || fail "safe upgrade expected type=upgraded, got '$SAFE_UPGRADE_TYPE'"
+
+          [[ -n "$AUTO_PUBLISH_PKG" ]] || fail "auto publish package id is empty"
+          [[ -n "$AUTO_UPGRADE_PKG" ]] || fail "auto upgrade package id is empty"
+          [[ -n "$FORCE_PUBLISH_PKG" ]] || fail "force publish package id is empty"
+          [[ -n "$SAFE_UPGRADE_PKG" ]] || fail "safe upgrade package id is empty"
+
+          [[ -z "$AUTO_PUBLISH_PREV" ]] || fail "auto publish previous-package-id must be empty"
+          [[ -n "$AUTO_UPGRADE_PREV" ]] || fail "auto upgrade previous-package-id must be set"
+          [[ -n "$FORCE_PUBLISH_PREV" ]] || fail "force publish previous-package-id must be set"
+          [[ -n "$SAFE_UPGRADE_PREV" ]] || fail "safe upgrade previous-package-id must be set"
+
+          extract_published_at() {
+            local file="$1"
+            sed -nE 's/^[[:space:]]*published-at[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$file" | tail -n 1
+          }
+
+          assert_snapshot_matches() {
+            local label="$1"
+            local snapshot="$2"
+            local expected_pkg="$3"
+
+            [[ -f "$snapshot" ]] || fail "$label snapshot not found: $snapshot"
+            grep -q "published" "$snapshot" || fail "$label snapshot missing published section"
+
+            local snapshot_published_at
+            snapshot_published_at=$(extract_published_at "$snapshot")
+            [[ -n "$snapshot_published_at" ]] || fail "$label snapshot missing published-at"
+            [[ "$snapshot_published_at" == "$expected_pkg" ]] || fail "$label snapshot published-at '$snapshot_published_at' does not match output package '$expected_pkg'"
+          }
+
+          assert_snapshot_matches "auto publish" "artifacts/auto_publish.Published.toml" "$AUTO_PUBLISH_PKG"
+          assert_snapshot_matches "auto upgrade" "artifacts/auto_upgrade.Published.toml" "$AUTO_UPGRADE_PKG"
+          assert_snapshot_matches "force publish" "artifacts/force_publish.Published.toml" "$FORCE_PUBLISH_PKG"
+          assert_snapshot_matches "safe upgrade" "artifacts/safe_upgrade.Published.toml" "$SAFE_UPGRADE_PKG"
+
+          [[ "$AUTO_UPGRADE_PREV" == "$AUTO_PUBLISH_PKG" ]] || fail "auto upgrade previous-package-id '$AUTO_UPGRADE_PREV' must equal auto publish package '$AUTO_PUBLISH_PKG'"
+          [[ "$FORCE_PUBLISH_PREV" == "$AUTO_UPGRADE_PKG" ]] || fail "force publish previous-package-id '$FORCE_PUBLISH_PREV' must equal auto upgrade package '$AUTO_UPGRADE_PKG'"
+          [[ "$SAFE_UPGRADE_PREV" == "$FORCE_PUBLISH_PKG" ]] || fail "safe upgrade previous-package-id '$SAFE_UPGRADE_PREV' must equal force publish package '$FORCE_PUBLISH_PKG'"
 

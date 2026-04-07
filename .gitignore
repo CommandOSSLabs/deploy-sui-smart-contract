@@ -29,3 +29,8 @@ temp/
 
 # Contract build artifacts
 example-contract/build/
+
+# Published contract metadata (ignored for testing purposes)
+example-contract/Published.toml
+action-test.yml
+artifacts/
